@@ -13,9 +13,13 @@ import java.io.Serializable;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class Product implements Persistable, Serializable {
-    @Column(name = "product_id")
+public class Product {
     @Id
+    @GeneratedValue(strategy=GenerationType.IDENTITY)
+    Integer id;
+
+    String marketId;
+
     String productId;
 
     @Column(name = "self_cost")
@@ -33,16 +37,4 @@ public class Product implements Persistable, Serializable {
     @Column(name = "amount")
     Integer amount;
 
-    @Column(name = "seller_id")
-    Integer sellerId;
-
-    @Override
-    public Object getId() {
-        return productId;
-    }
-
-    @Override
-    public boolean isNew() {
-        return false;
-    }
 }

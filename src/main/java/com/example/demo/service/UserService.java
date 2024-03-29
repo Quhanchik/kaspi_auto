@@ -1,5 +1,6 @@
 package com.example.demo.service;
 
+import com.example.demo.entity.Market;
 import com.example.demo.entity.User;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.utils.UserLoginExistException;
@@ -14,6 +15,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -40,9 +42,7 @@ public class UserService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        System.out.println(username);
         Optional<User> userOptional = userRepository.findUserByLogin(username);
-        System.out.println(userOptional);
         if(userOptional.isPresent()) {
             return org.springframework.security.core.userdetails.User.builder()
                     .username(userOptional.get().getLogin())
@@ -52,5 +52,17 @@ public class UserService implements UserDetailsService {
         } else {
             throw new UsernameNotFoundException("user with this login not found");
         }
+    }
+
+    public List<User> getAllUsers() {
+        return userRepository.findAll();
+    }
+
+    public Optional<User> getUserByMarkets(List<Market> markets) {
+        return userRepository.getUserByMarkets(markets);
+    }
+
+    public Optional<User> getUserByLogin(String login) {
+        return userRepository.getUserByLogin(login);
     }
 }

@@ -2,8 +2,10 @@ package com.example.demo.schedule;
 
 import com.example.demo.entity.Market;
 import com.example.demo.entity.Product;
+import com.example.demo.entity.User;
 import com.example.demo.service.MarketService;
 import com.example.demo.service.ProductService;
+import com.example.demo.service.UserService;
 import com.example.demo.utils.HTTP;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,108 +43,115 @@ import java.util.Optional;
 public class PriceSchedule {
     private final ProductService productService;
     private final MarketService marketService;
+    private final UserService userService;
 
     private Integer dumpingCounter = 0;
 
-    @Scheduled(fixedRate = 60000)
+    @Scheduled(fixedRate = 20000)
     public void update2() throws IOException, InterruptedException {
         CloseableHttpClient client = HttpClients.createDefault();
         ObjectMapper mapper = new ObjectMapper();
         BasicHeader[] loginHeaders = marketService.getDefaultHeaders("application/x-www-form-urlencoded");
+        List<User> users = userService.getAllUsers();
 
-        HttpPost post = new HttpPost("https://kaspi.kz/mc/api/login");
+        for (int i = 0; i < users.size(); i++) {
+            User user = users.get(i);
 
-        List<NameValuePair> body = new ArrayList<>();
-        body.add(new BasicNameValuePair("username", "seidaliyevagabi@gmail.com"));
-        body.add(new BasicNameValuePair("password", "19283746511Agab!"));
+            List<Market> markets = user.getMarkets();
 
-        post.setEntity(new UrlEncodedFormEntity(body));
+            for (int j = 0; j < markets.size(); j++) {
 
-        post.setHeaders(loginHeaders);
+                Market market = markets.get(j);
 
-        CloseableHttpResponse response = client.execute(post);
+                HttpPost post = new HttpPost("https://kaspi.kz/mc/api/login");
 
-        System.out.println(response.getLastHeader("Set-Cookie").getValue().split(";")[0].split("=")[1]);
+                List<NameValuePair> body = new ArrayList<>();
+                body.add(new BasicNameValuePair("username", market.getLogin()));
+                body.add(new BasicNameValuePair("password", market.getPassword()));
 
-        BasicHeader[] headersWithCookie = marketService.getHeadersWithCookie("application/json; charset=UTF-8" , response.getLastHeader("Set-Cookie").getValue().split(";")[0].split("=")[1]);
+                post.setEntity(new UrlEncodedFormEntity(body));
 
-        HttpGet get = new HttpGet("https://mc.shop.kaspi.kz/offers/api/v1/offer/count?m=30082479");
-        get.setHeaders(headersWithCookie);
+                post.setHeaders(loginHeaders);
 
-        response = client.execute(get);
+                CloseableHttpResponse response = client.execute(post);
 
-        Integer itemsAmount = mapper.readTree(new String(response.getEntity().getContent().readAllBytes(), StandardCharsets.UTF_8)).get("published").asInt();
+                BasicHeader[] headersWithCookie = marketService.getHeadersWithCookie("application/json; charset=UTF-8", response.getLastHeader("Set-Cookie").getValue().split(";")[0].split("=")[1]);
 
-        get = new HttpGet(String.format("https://mc.shop.kaspi.kz/bff/offer-view/list?m=%s&p=0&l=%s&a=true&t=&c=", "30082479", itemsAmount));
-        get.setHeaders(headersWithCookie);
+                HttpGet get = new HttpGet(String.format("https://mc.shop.kaspi.kz/offers/api/v1/offer/count?m=%s", market.getMarketId()));
+                get.setHeaders(headersWithCookie);
 
-        response = client.execute(get);
+                response = client.execute(get);
 
-        JsonNode listOfItemsNode = mapper.readTree(new String(response.getEntity().getContent().readAllBytes(), StandardCharsets.UTF_8)).get("data");
+                Integer itemsAmount = mapper.readTree(new String(response.getEntity().getContent().readAllBytes(), StandardCharsets.UTF_8)).get("published").asInt();
 
-        for(int i = 0; i < itemsAmount; i++) {
-            client = HttpClients.createDefault();
+                get = new HttpGet(String.format("https://mc.shop.kaspi.kz/bff/offer-view/list?m=%s&p=0&l=%s&a=true&t=&c=", market.getMarketId(), itemsAmount));
+                get.setHeaders(headersWithCookie);
 
-            JsonNode item = listOfItemsNode.get(i);
+                response = client.execute(get);
 
-            String masterSku = item.get("masterSku").asText();
-            String offersBody = String.format("{\"cityId\":\"750000000\",\"id\":\"%s\",\"merchantUID\":\"\",\"limit\":1,\"page\":0,\"sort\":true,\"zoneId\":\"Magnum_ZONE1\",\"installationId\":\"-1\"}", masterSku);
+                JsonNode listOfItemsNode = mapper.readTree(new String(response.getEntity().getContent().readAllBytes(), StandardCharsets.UTF_8)).get("data");
 
-            post = new HttpPost(String.format("https://kaspi.kz/yml/offer-view/offers/%s", masterSku));
-            post.setEntity(new StringEntity(offersBody));
-            post.setHeaders(marketService.getDefaultHeaders("application/json"));
+                for (int k = 0; k < itemsAmount; k++) {
+                    client = HttpClients.createDefault();
 
-            response = client.execute(post);
-            JsonNode offersNode = mapper.readTree(new String(response.getEntity().getContent().readAllBytes(), StandardCharsets.UTF_8)).get("offers");
+                    JsonNode item = listOfItemsNode.get(k);
 
-            System.out.println(productService.getProductByProductId(item.get("masterSku").asText(), 3));
+                    String masterSku = item.get("masterSku").asText();
+                    String sku = item.get("sku").asText();
+                    String offersBody = String.format("{\"cityId\":\"750000000\",\"id\":\"%s\",\"merchantUID\":\"\",\"limit\":1,\"page\":0,\"sort\":true,\"zoneId\":\"Magnum_ZONE1\",\"installationId\":\"-1\"}", masterSku);
 
-            if(!offersNode.get(0).get("merchantId").asText().equals("30082479")) {
-                String jsonSend = "{\"merchantUid\":\"30082479\",\"sku\":\"510820\",\"model\":\"Внешний аккумулятор CUKTECH PB200P 20000 мАч серый\",\"price\":29990,\"availabilities\":[{\"available\":\"yes\",\"storeId\":\"30082479_PP1\"}],\"cityPrices\":[{\"value\":29990,\"cityId\":\"750000000\"}]}";
+                    post = new HttpPost(String.format("https://kaspi.kz/yml/offer-view/offers/%s", masterSku));
+                    post.setEntity(new StringEntity(offersBody));
+                    post.setHeaders(marketService.getDefaultHeaders("application/json"));
 
-                JsonNode jsonSendNode = mapper.readTree(jsonSend);
+                    response = client.execute(post);
+                    JsonNode offersNode = mapper.readTree(new String(response.getEntity().getContent().readAllBytes(), StandardCharsets.UTF_8)).get("offers");
 
-                Integer lowestPrice = offersNode.get(0).get("price").asInt();
+                    if (!offersNode.get(0).get("merchantId").asText().equals(market.getMarketId())) {
+                        String jsonSend = "{\"merchantUid\":\"30082479\",\"sku\":\"510820\",\"model\":\"Внешний аккумулятор CUKTECH PB200P 20000 мАч серый\",\"price\":29990,\"availabilities\":[{\"available\":\"yes\",\"storeId\":\"30082479_PP1\"}],\"cityPrices\":[{\"value\":29990,\"cityId\":\"750000000\"}]}";
 
-                Optional<Product> productOptional = productService.getProductByProductId(item.get("masterSku").asText(), 3);
+                        JsonNode jsonSendNode = mapper.readTree(jsonSend);
 
-                if(dumpingCounter < 100) {
-                    if(productOptional.isPresent()) {
-                        Product product = productOptional.get();
+                        Integer lowestPrice = offersNode.get(0).get("price").asInt();
 
-                        if(lowestPrice - product.getDampingCost() > product.getSelfCost() * (product.getMinProfitPercent() / 100) + product.getSelfCost()) {
-                            ((ObjectNode) jsonSendNode).put("price", lowestPrice - product.getDampingCost());
-                            ((ObjectNode) jsonSendNode.get("cityPrices").get(0)).put("value", lowestPrice - product.getDampingCost());
+                        Optional<Product> productOptional = productService.getProductByProductId(sku);
+                        if (dumpingCounter < 100) {
+                            if (productOptional.isPresent()) {
+                                Product product = productOptional.get();
+
+                                if (lowestPrice - product.getDampingCost() > product.getSelfCost() * (product.getMinProfitPercent() / 100) + product.getSelfCost()) {
+                                    ((ObjectNode) jsonSendNode).put("price", lowestPrice - product.getDampingCost());
+                                    ((ObjectNode) jsonSendNode.get("cityPrices").get(0)).put("value", lowestPrice - product.getDampingCost());
+                                    ((ObjectNode) jsonSendNode).put("sku", item.get("sku"));
+                                    ((ObjectNode) jsonSendNode).put("model", item.get("model"));
+                                }
+                            } else {
+                                ((ObjectNode) jsonSendNode).put("price", lowestPrice - 1);
+                                ((ObjectNode) jsonSendNode.get("cityPrices").get(0)).put("value", lowestPrice - 1);
+                                ((ObjectNode) jsonSendNode).put("sku", item.get("sku"));
+                                ((ObjectNode) jsonSendNode).put("model", item.get("model"));
+                            }
+
+                            dumpingCounter++;
+                        } else {
+                            ((ObjectNode) jsonSendNode).put("price", lowestPrice + 200);
+                            ((ObjectNode) jsonSendNode.get("cityPrices").get(0)).put("value", lowestPrice + 200);
                             ((ObjectNode) jsonSendNode).put("sku", item.get("sku"));
                             ((ObjectNode) jsonSendNode).put("model", item.get("model"));
+
+                            dumpingCounter = 0;
                         }
-                    } else {
-                        ((ObjectNode) jsonSendNode).put("price", lowestPrice - 1);
-                        ((ObjectNode) jsonSendNode.get("cityPrices").get(0)).put("value", lowestPrice - 1);
-                        ((ObjectNode) jsonSendNode).put("sku", item.get("sku"));
-                        ((ObjectNode) jsonSendNode).put("model", item.get("model"));
+
+                        post = new HttpPost("https://mc.shop.kaspi.kz/pricefeed/upload/merchant/process");
+                        post.setEntity(new StringEntity(jsonSendNode.toString()));
+                        post.setHeaders(headersWithCookie);
+
+                        response = client.execute(post);
                     }
 
-                    dumpingCounter++;
-                } else {
-                    ((ObjectNode) jsonSendNode).put("price", lowestPrice + 200);
-                    ((ObjectNode) jsonSendNode.get("cityPrices").get(0)).put("value", lowestPrice + 200);
-                    ((ObjectNode) jsonSendNode).put("sku", item.get("sku"));
-                    ((ObjectNode) jsonSendNode).put("model", item.get("model"));
-
-                    dumpingCounter = 0;
+                    Thread.sleep(500);
                 }
-
-                post = new HttpPost("https://mc.shop.kaspi.kz/pricefeed/upload/merchant/process");
-                post.setEntity(new StringEntity(jsonSendNode.toString()));
-                post.setHeaders(headersWithCookie);
-
-                response = client.execute(post);
-
-                System.out.println(response.getCode());
             }
-
-            Thread.sleep(500);
         }
     }
 

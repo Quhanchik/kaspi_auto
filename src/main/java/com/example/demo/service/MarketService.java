@@ -1,6 +1,7 @@
 package com.example.demo.service;
 
 import com.example.demo.entity.Market;
+import com.example.demo.entity.User;
 import com.example.demo.repository.MarketRepository;
 import com.example.demo.utils.MarketAlreadyExist;
 import lombok.RequiredArgsConstructor;
@@ -53,5 +54,9 @@ public class MarketService {
 
     public List<Market> getAll() {
         return marketRepository.findAll();
+    }
+
+    public List<Market> getMarketsByUser(User user) {
+        return marketRepository.getMarketsByUser(user);
     }
 }
